@@ -1,4 +1,5 @@
 ### Import Packages ########################################
+import imp
 from pydoc import classify_class_attrs, classname
 import dash
 import dash_bootstrap_components as dbc
@@ -6,11 +7,18 @@ import pandas as pd
 import plotly.graph_objs as go
 from dash import Input, Output, dcc, html, State
 from sklearn import datasets
-from datetime import datetime as dt
+from datetime import datetime as dt,timedelta
+from datetime import date
+from json import dumps
+from datetime import date
 from dash.exceptions import PreventUpdate
 import yfinance as yf
 import plotly.express as px
+from sklearn.svm import SVR
+import numpy as np
+import pandas_datareader.data as web
 import pickle
+from prophet import Prophet
 
 
 ### Setup ###################################################
@@ -72,9 +80,7 @@ information_output = html.Div(
               id="description", className="decription_ticker"),
             html.Div(id="graphs-content", style={"margin-top": "10px"}),
             html.Div(id='indicator-graph', style={"margin-top": "10px"}),# Indicator plot,
-            html.Div([
-                # Forecast plot
-            ], id="forecast-content")
+            html.Div(id="forecast-content", style={"margin-top": "10px"})#forecast plot
           ],
         className="content")
 
@@ -132,7 +138,6 @@ def get_stock_price_fig(df):
     Output("company_name", "children"),
     Input("stock-code", "value"),
 )
-
 def update_output(input_value):
     if not any(input_value):
         raise PreventUpdate
@@ -177,9 +182,55 @@ def get_stock_ema_price_fig(df):
             height=500, width=1200
         )
     return fig
+    
+
+@app.callback(
+    Output('forecast-content', 'children'),
+    State('stock-code', 'value'),
+    State('no-of-days', 'value'),
+    Input('forecast', 'n_clicks'),
+)
+def forecast(value, n_days, n_clicks):
+    graphs = []
+    if n_clicks is None or not any(value):
+            raise PreventUpdate
+    else:
+        symbol = value
+        # start = date.today() - timedelta(60)
+        # end = date.today()
+        start = date.today() - timedelta(60)
+        # start =  dumps(start, indent=4, sort_keys=True, default=str)
+        end = date.today()
+        # end = dumps(end, indent=4, sort_keys=True, default=str)
+        df = web.DataReader(symbol, 'yahoo', start, end)  # Collects data#prices in USD
+        df.reset_index(inplace=True)
+        data=df[["Date","Adj Close"]]
+        data=data.rename(columns={"Date": "ds", "Adj Close": "y"})
+        print(data.head())
+        df_train=data[0:54]
+        df_test=data[54:60]
+        m = Prophet()
+        m.fit(df_train)
+        future = m.make_future_dataframe(periods=int(n_days))
+        forecast = m.predict(future)
+        graphs.append(dcc.Graph(
+        id='forecast_graph',
+        figure = get_forecast_graph(forecast)))
+        return graphs
+
+def get_forecast_graph(df):
+    fig = px.line(
+            df,
+            x="ds",
+            y=["yhat"],
+            title="Forecast Graph",
+            height=500, width=1200
+        )
+    return fig
+    
 
 
-
+# def get_forecast_graph(dates, y_pred):
 
 
 
