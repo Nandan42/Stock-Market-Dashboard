@@ -1,12 +1,9 @@
 ### Import Packages ########################################
 import imp
-from pydoc import classify_class_attrs, classname
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
-import plotly.graph_objs as go
 from dash import Input, Output, dcc, html, State
-from sklearn import datasets
 from datetime import datetime as dt,timedelta
 from datetime import date
 from json import dumps
@@ -14,24 +11,21 @@ from datetime import date
 from dash.exceptions import PreventUpdate
 import yfinance as yf
 import plotly.express as px
-from sklearn.svm import SVR
 import numpy as np
 import pandas_datareader.data as web
-import pickle
 from prophet import Prophet
+from utilities import *
 
 
 ### Setup ###################################################
-iris_raw = datasets.load_iris()
-iris = pd.DataFrame(iris_raw["data"], columns=iris_raw["feature_names"])
 
 app = dash.Dash(external_stylesheets=[dbc.themes.DARKLY])
 
 server = app.server
 
 ### load ML model ###########################################
-with open('stock_model.pickle', 'rb') as f:
-    clf = pickle.load(f)
+# with open('stock_model.pickle', 'rb') as f:
+#     clf = pickle.load(f)
 
 ### App Layout ###############################################
 controls = dbc.Card(html.Div(
@@ -122,24 +116,15 @@ def update_graph(value, start_date, end_date, n_clicks):
             # fig = get_stock_price_fig(df)
             return graphs
 
-def get_stock_price_fig(df):
-    fig = px.line(
-            df,
-            x="Date",
-            y=["Close", "Open"],
-            title="Open Close Price",
-            height=500, width=1200
-        )
-    return fig
-
 @app.callback(
     Output("description", "children"),
     Output("Logo", "src"),
     Output("company_name", "children"),
-    Input("stock-code", "value"),
+    State("stock-code", "value"),
+    Input("submit-val",'n_clicks')
 )
-def update_output(input_value):
-    if not any(input_value):
+def update_output(input_value, n_clicks):
+    if n_clicks is None or not any(input_value):
         raise PreventUpdate
     else:
         val = input_value
@@ -172,16 +157,6 @@ def update_ema_graph(value, start_date, end_date, n_clicks):
             id='ema_graph',
             figure= get_stock_ema_price_fig(df)))
             return graphs
-
-def get_stock_ema_price_fig(df):
-    fig = px.line(
-            df,
-            x="Date",
-            y=["EWA_20"],
-            title="Exponential Moving Average vs Date",
-            height=500, width=1200
-        )
-    return fig
     
 
 @app.callback(
@@ -198,7 +173,7 @@ def forecast(value, n_days, n_clicks):
         symbol = value
         # start = date.today() - timedelta(60)
         # end = date.today()
-        start = date.today() - timedelta(60)
+        start = date.today() - timedelta(1460)
         # start =  dumps(start, indent=4, sort_keys=True, default=str)
         end = date.today()
         # end = dumps(end, indent=4, sort_keys=True, default=str)
@@ -207,52 +182,18 @@ def forecast(value, n_days, n_clicks):
         data=df[["Date","Adj Close"]]
         data=data.rename(columns={"Date": "ds", "Adj Close": "y"})
         print(data.head())
-        df_train=data[0:54]
-        df_test=data[54:60]
-        m = Prophet()
+        df_train=data
+        # print('This is'+str(df.shape[0]))
+        m = Prophet(changepoint_prior_scale=0.09)
         m.fit(df_train)
+        print(n_days)
         future = m.make_future_dataframe(periods=int(n_days))
         forecast = m.predict(future)
         graphs.append(dcc.Graph(
         id='forecast_graph',
         figure = get_forecast_graph(forecast)))
         return graphs
-
-def get_forecast_graph(df):
-    fig = px.line(
-            df,
-            x="ds",
-            y=["yhat"],
-            title="Forecast Graph",
-            height=500, width=1200
-        )
-    return fig
     
-
-
-# def get_forecast_graph(dates, y_pred):
-
-
-
-# make sure that x and y values can't be the same variable
-# def filter_options(v):
-#     """Disable option v"""
-#     return [
-#         {"label": col, "value": col, "disabled": col == v}
-#         for col in iris.columns
-#     ]
-
-
-# # functionality is the same for both dropdowns, so we reuse filter_options
-# app.callback(Output("x-variable", "options"), [Input("y-variable", "value")])(
-#     filter_options
-# )
-# app.callback(Output("y-variable", "options"), [Input("x-variable", "value")])(
-#     filter_options
-# )
-
 
 if __name__ == '__main__':
     app.run_server(debug=True)
-
-#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
